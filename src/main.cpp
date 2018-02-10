@@ -17,8 +17,12 @@
 namespace Global
 {
 std::map<std::string, std::string> arguments;
+
 std::string vertexShaderPath = "default_vertex_shader.glsl";
 std::string fragmentShaderPath = "default_fragment_shader.glsl";
+
+std::string inputFilePath;
+std::string outputFilePath;
 
 GLFWwindow *mainWindow;
 
@@ -155,7 +159,7 @@ GLuint GetTextureFromPNG(std::string filename) {
 	unsigned char**imageDataArray = new unsigned char*[imageHeight];
 	for (size_t i = 0; i < imageHeight; ++i)
 	{
-		imageDataArray[i] = &imageData[i * imageWidth * 4];
+		imageDataArray[i] = &imageData[(imageHeight-1-i) * imageWidth * 4];
 	}
 	png_read_image(pngPtr, imageDataArray);
 	/* Debug output */
@@ -173,6 +177,7 @@ GLuint GetTextureFromPNG(std::string filename) {
 	}
 	/* Debug ouput */
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
+    // glGenerateMipmap(GL_TEXTURE_2D);
 	glFinish();
 	png_read_end(pngPtr,pngInfoPtr);
 	png_destroy_read_struct(&pngPtr, &pngInfoPtr,nullptr);
@@ -229,6 +234,14 @@ void ApplyArguments()
 	if (Global::arguments.find("fragmentShader") != Global::arguments.end())
 	{
 		Global::fragmentShaderPath = Global::arguments["fragmentShader"];
+	}
+    if (Global::arguments.find("inputFile") != Global::arguments.end())
+	{
+		Global::inputFilePath = Global::arguments["inputFile"];
+	}
+    if (Global::arguments.find("outputFile") != Global::arguments.end())
+	{
+		Global::outputFilePath = Global::arguments["outputFile"];
 	}
 }
 
@@ -450,7 +463,7 @@ void Render()
 	};
 	GLuint vertexBufferHandle;
 	GLuint vertexArrayHandle;
-	GLuint textureHandle = GetTextureFromPNG("D:\\testpng.png");
+	GLuint textureHandle = GetTextureFromPNG(Global::inputFilePath);
 
 	glGenBuffers(1, &vertexBufferHandle);
 	glBindBuffer(GL_ARRAY_BUFFER, vertexBufferHandle);
@@ -465,6 +478,8 @@ void Render()
 
 	glActiveTexture(GL_TEXTURE1);
 	glBindTexture(GL_TEXTURE_2D, textureHandle); 
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	GLuint samplerLocation = glGetUniformLocation(Global::programHandle, "textureSampler");
 	glUniform1i(samplerLocation, 1);
 
