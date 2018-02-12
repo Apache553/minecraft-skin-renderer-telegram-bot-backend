@@ -14,26 +14,35 @@
 #include <cstdlib>
 #include <stdexcept>
 
+struct PipelineInfo {
+	GLuint vertexShaderHandle;
+	GLuint fragmentShaderHandle;
+	GLuint programHandle;
+};
+
 namespace Global
 {
-std::map<std::string, std::string> arguments;
+	std::map<std::string, std::string> arguments;
 
-std::string vertexShaderPath = "default_vertex_shader.glsl";
-std::string fragmentShaderPath = "default_fragment_shader.glsl";
+	std::string vertexShaderPath;
+	std::string fragmentShaderPath;
 
-std::string inputFilePath;
-std::string outputFilePath;
+	std::string bgVertexShaderPath;
+	std::string bgFragmentShaderPath;
 
-GLFWwindow *mainWindow;
+	std::string inputFilePath;
+	std::string outputFilePath;
+	std::string backgroundPath;
 
-int windowWidth = 800;
-int windowHeight = 600;
+	GLFWwindow *mainWindow;
 
-const int signatureLength = 4;
+	int windowWidth = 800;
+	int windowHeight = 600;
 
-GLuint programHandle;
-GLuint vertexShaderHandle;
-GLuint fragmentShaderHandle;
+	const int signatureLength = 4;
+
+	PipelineInfo modelPipelineInfo;
+	PipelineInfo backgroundPipelineInfo;
 }
 
 void Initizalize();
@@ -46,13 +55,13 @@ void DumpArguments();
 
 int main(int argc, char **argv)
 {
-    ParseArguments(argc, argv);
-    DumpArguments();
+	ParseArguments(argc, argv);
+	DumpArguments();
 	ApplyArguments();
-    Initizalize();
-    Render();
-    Cleanup();
-    return 0;
+	Initizalize();
+	Render();
+	Cleanup();
+	return 0;
 }
 
 void CheckOpenGLError()
@@ -159,11 +168,11 @@ GLuint GetTextureFromPNG(std::string filename) {
 	unsigned char**imageDataArray = new unsigned char*[imageHeight];
 	for (size_t i = 0; i < imageHeight; ++i)
 	{
-		imageDataArray[i] = &imageData[(imageHeight-1-i) * imageWidth * 4];
+		imageDataArray[i] = &imageData[(imageHeight - 1 - i) * imageWidth * 4];
 	}
 	png_read_image(pngPtr, imageDataArray);
 	/* Debug output */
-	for (size_t i = 0; i < imageHeight; ++i)
+	/*for (size_t i = 0; i < imageHeight; ++i)
 	{
 		for (size_t j = 0; j < imageWidth; ++j)
 		{
@@ -174,13 +183,12 @@ GLuint GetTextureFromPNG(std::string filename) {
 			std::cout << ' ';
 		}
 		std::cout << std::endl;
-	}
+	}*/
 	/* Debug ouput */
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
-    // glGenerateMipmap(GL_TEXTURE_2D);
-	glFinish();
-	png_read_end(pngPtr,pngInfoPtr);
-	png_destroy_read_struct(&pngPtr, &pngInfoPtr,nullptr);
+	glFlush();	// make sure opengl copied the data to the memory of texture
+	png_read_end(pngPtr, pngInfoPtr);
+	png_destroy_read_struct(&pngPtr, &pngInfoPtr, nullptr);
 	std::fclose(filePtr);
 
 	delete[] imageDataArray;
@@ -191,28 +199,28 @@ GLuint GetTextureFromPNG(std::string filename) {
 
 void ParseArguments(int argc, char **argv)
 {
-    std::regex pattern("(.*?)=(.*)");
-    for (int index = 1; index < argc; ++index)
-    {
-        std::cmatch matches;
-        bool isFound = std::regex_match(argv[index], matches, pattern);
-        if (isFound)
-        {
-            Global::arguments.insert(std::make_pair(matches[1], matches[2]));
-        }
-        else
-        {
-            std::cout << "Illegal argument: " << argv[index] << std::endl;
-        }
-    }
+	std::regex pattern("(.*?)=(.*)");
+	for (int index = 1; index < argc; ++index)
+	{
+		std::cmatch matches;
+		bool isFound = std::regex_match(argv[index], matches, pattern);
+		if (isFound)
+		{
+			Global::arguments.insert(std::make_pair(matches[1], matches[2]));
+		}
+		else
+		{
+			std::cout << "Illegal argument: " << argv[index] << std::endl;
+		}
+	}
 }
 
 void DumpArguments()
 {
-    for (auto &argument : Global::arguments)
-    {
-        std::cout << argument.first << " : " << argument.second << std::endl;
-    }
+	for (auto &argument : Global::arguments)
+	{
+		std::cout << argument.first << " : " << argument.second << std::endl;
+	}
 }
 
 void ApplyArguments()
@@ -220,7 +228,7 @@ void ApplyArguments()
 	if (Global::arguments.find("windowWidth") != Global::arguments.end())
 	{
 		char* ptr;
-		Global::windowWidth=strtoul(Global::arguments["windowWidth"].c_str(), &ptr, 10);
+		Global::windowWidth = strtoul(Global::arguments["windowWidth"].c_str(), &ptr, 10);
 	}
 	if (Global::arguments.find("windowHeight") != Global::arguments.end())
 	{
@@ -235,13 +243,25 @@ void ApplyArguments()
 	{
 		Global::fragmentShaderPath = Global::arguments["fragmentShader"];
 	}
-    if (Global::arguments.find("inputFile") != Global::arguments.end())
+	if (Global::arguments.find("inputFile") != Global::arguments.end())
 	{
 		Global::inputFilePath = Global::arguments["inputFile"];
 	}
-    if (Global::arguments.find("outputFile") != Global::arguments.end())
+	if (Global::arguments.find("outputFile") != Global::arguments.end())
 	{
 		Global::outputFilePath = Global::arguments["outputFile"];
+	}
+	if (Global::arguments.find("backgroundFile") != Global::arguments.end())
+	{
+		Global::backgroundPath = Global::arguments["backgroundFile"];
+	}
+	if (Global::arguments.find("bgVertexShader") != Global::arguments.end())
+	{
+		Global::bgVertexShaderPath = Global::arguments["bgVertexShader"];
+	}
+	if (Global::arguments.find("bgFragmentShader") != Global::arguments.end())
+	{
+		Global::bgFragmentShaderPath = Global::arguments["bgFragmentShader"];
 	}
 }
 
@@ -318,7 +338,7 @@ void framebufferSizeCallback(GLFWwindow* window, int width, int height)
 	glViewport(0, 0, width, height);
 }
 
-std::string GetFileContent(std::string filename,size_t bufferSize=1024)
+std::string GetFileContent(std::string filename, size_t bufferSize = 1024)
 {
 	std::ifstream input(filename, std::ios::binary | std::ios::in);
 	if (!input.is_open())
@@ -373,126 +393,172 @@ std::string GetGLProgramLog(GLuint programHandle)
 	return infoLog;
 }
 
-void SynthesizePipeline()
+PipelineInfo SynthesizePipeline(std::string vertexShaderPath,std::string fragmentShaderPath)
 {
 	int status;
 	const char* _ref;
-	Global::programHandle = glCreateProgram();
+	PipelineInfo info;
+	info.programHandle = glCreateProgram();
 	// process vertex shader
-	Global::vertexShaderHandle = glCreateShader(GL_VERTEX_SHADER);
-	auto vertexShaderContent = GetFileContent(Global::vertexShaderPath);
+	info.vertexShaderHandle = glCreateShader(GL_VERTEX_SHADER);
+	auto vertexShaderContent = GetFileContent(vertexShaderPath);
 	_ref = vertexShaderContent.c_str();
-	glShaderSource(Global::vertexShaderHandle, 1, &_ref, nullptr);
-	glCompileShader(Global::vertexShaderHandle);
-	glGetShaderiv(Global::vertexShaderHandle, GL_COMPILE_STATUS, &status);
+	glShaderSource(info.vertexShaderHandle, 1, &_ref, nullptr);
+	glCompileShader(info.vertexShaderHandle);
+	glGetShaderiv(info.vertexShaderHandle, GL_COMPILE_STATUS, &status);
 	if (status != GL_TRUE)
 	{
 		std::cerr << "ERROR: Unable to compile vertex shader" << std::endl;
-		std::cerr << GetGLShaderLog(Global::vertexShaderHandle) << std::endl;
+		std::cerr << GetGLShaderLog(info.vertexShaderHandle) << std::endl;
 		exit(-1);
 	}
 	// process fragment shader
-	Global::fragmentShaderHandle = glCreateShader(GL_FRAGMENT_SHADER);
-	auto fragmentShaderContent = GetFileContent(Global::fragmentShaderPath);
+	info.fragmentShaderHandle = glCreateShader(GL_FRAGMENT_SHADER);
+	auto fragmentShaderContent = GetFileContent(fragmentShaderPath);
 	_ref = fragmentShaderContent.c_str();
-	glShaderSource(Global::fragmentShaderHandle, 1, &_ref, nullptr);
-	glCompileShader(Global::fragmentShaderHandle);
-	glGetShaderiv(Global::fragmentShaderHandle, GL_COMPILE_STATUS, &status);
+	glShaderSource(info.fragmentShaderHandle, 1, &_ref, nullptr);
+	glCompileShader(info.fragmentShaderHandle);
+	glGetShaderiv(info.fragmentShaderHandle, GL_COMPILE_STATUS, &status);
 	if (status != GL_TRUE)
 	{
 		std::cerr << "ERROR: Unable to compile fragment shader" << std::endl;
-		std::cerr << GetGLShaderLog(Global::fragmentShaderHandle) << std::endl;
+		std::cerr << GetGLShaderLog(info.fragmentShaderHandle) << std::endl;
 		exit(-1);
 	}
 	// synthesize pipeline
-	glAttachShader(Global::programHandle, Global::vertexShaderHandle);
-	glAttachShader(Global::programHandle, Global::fragmentShaderHandle);
-	glLinkProgram(Global::programHandle);
-	glGetProgramiv(Global::programHandle, GL_LINK_STATUS, &status);
+	glAttachShader(info.programHandle, info.vertexShaderHandle);
+	glAttachShader(info.programHandle, info.fragmentShaderHandle);
+	glLinkProgram(info.programHandle);
+	glGetProgramiv(info.programHandle, GL_LINK_STATUS, &status);
 	if (status != GL_TRUE)
 	{
 		std::cerr << "ERROR: Unable to link fragment shader" << std::endl;
-		std::cerr << GetGLProgramLog(Global::programHandle) << std::endl;
+		std::cerr << GetGLProgramLog(info.programHandle) << std::endl;
 		exit(-1);
 	}
-	glUseProgram(Global::programHandle);
+	return info;
 }
 
 void Initizalize()
 {
-    glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	glfwInit();
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_FALSE);
 	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    Global::mainWindow = glfwCreateWindow(Global::windowWidth, Global::windowHeight, "Minecraft Skin Renderer", NULL, NULL);
-    if (Global::mainWindow == NULL)
-    {
-        std::cerr << "Create main window failed!" << std::endl;
-        glfwTerminate();
-        exit(-1);
-    }
-    glfwMakeContextCurrent(Global::mainWindow);
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-    {
-        std::cerr << "Initialize GLAD failed!" << std::endl;
-        exit(-1);
-    }
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	Global::mainWindow = glfwCreateWindow(Global::windowWidth, Global::windowHeight, "Minecraft Skin Renderer", NULL, NULL);
+	if (Global::mainWindow == NULL)
+	{
+		std::cerr << "Create main window failed!" << std::endl;
+		glfwTerminate();
+		exit(-1);
+	}
+	glfwMakeContextCurrent(Global::mainWindow);
+	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+	{
+		std::cerr << "Initialize GLAD failed!" << std::endl;
+		exit(-1);
+	}
 
 	glfwSetFramebufferSizeCallback(Global::mainWindow, framebufferSizeCallback);
 
-    glViewport(0, 0, Global::windowWidth, Global::windowHeight);
+	glViewport(0, 0, Global::windowWidth, Global::windowHeight);
 	glEnable(GL_DEBUG_OUTPUT);
 	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
 	glDebugMessageCallback(DebugCallback, nullptr);
 	glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
-	SynthesizePipeline();
+	Global::modelPipelineInfo = SynthesizePipeline(Global::vertexShaderPath, Global::fragmentShaderPath);
+	Global::backgroundPipelineInfo = SynthesizePipeline(Global::bgVertexShaderPath, Global::bgFragmentShaderPath);
+}
+
+void RenderBackground()
+{
+	float vertexInfo[] = {
+		// position		textureCoord
+		-1.0f,-1.0f,	0.0f,0.0f,
+		 1.0f,-1.0f,	1.0f,0.0f,
+		 1.0f, 1.0f,	1.0f,1.0f,
+		-1.0f, 1.0f,	0.0f,1.0f
+	};
+	glUseProgram(Global::backgroundPipelineInfo.programHandle);
+	GLuint subroutineIndex;
+	if (Global::backgroundPath.empty())
+	{
+		subroutineIndex = glGetSubroutineIndex(Global::backgroundPipelineInfo.programHandle, GL_FRAGMENT_SHADER, "Plain");
+	}
+	else
+	{
+		subroutineIndex = glGetSubroutineIndex(Global::backgroundPipelineInfo.programHandle, GL_FRAGMENT_SHADER, "Image");
+	}
+	GLuint subroutineLocation = glGetSubroutineUniformLocation(Global::backgroundPipelineInfo.programHandle, GL_FRAGMENT_SHADER, "GetColor");
+	GLsizei number;
+	glGetProgramStageiv(Global::backgroundPipelineInfo.programHandle, GL_FRAGMENT_SHADER, GL_ACTIVE_SUBROUTINE_UNIFORM_LOCATIONS, &number);
+	GLuint* indices = new GLuint[number];
+	indices[subroutineLocation] = subroutineIndex;
+	glUniformSubroutinesuiv(GL_FRAGMENT_SHADER, number, indices);
+	delete[] indices;
+
+	GLuint vertexArrayHandle;
+	GLuint vertexArrayBufferHandle;
+	GLuint textureHandle;
+
+	glGenVertexArrays(1, &vertexArrayHandle);
+	glGenBuffers(1, &vertexArrayBufferHandle);
+
+	glBindVertexArray(vertexArrayHandle);
+	glBindBuffer(GL_ARRAY_BUFFER, vertexArrayBufferHandle);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertexInfo), vertexInfo, GL_STATIC_DRAW);
+
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(0));
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
+	glEnableVertexAttribArray(0);
+	glEnableVertexAttribArray(1);
+
+	if (!Global::backgroundPath.empty())
+	{
+		textureHandle = GetTextureFromPNG(Global::backgroundPath);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, textureHandle);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		GLuint samplerLocation = glGetUniformLocation(Global::backgroundPipelineInfo.programHandle, "textureSampler");
+		glUniform1i(samplerLocation, 0);
+	}
+
+	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+	glFlush();
+
+	glDeleteBuffers(1, &vertexArrayBufferHandle);
+	glDeleteVertexArrays(1, &vertexArrayHandle);
+
+	if (!Global::backgroundPath.empty())
+	{
+		glDeleteTextures(1, &textureHandle);
+	}
+}
+
+void RenderModel()
+{
+
 }
 
 void Render()
 {
-    glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-	glFinish();
-	float vertices[] = {
-		1.0f,-1.0f,		1.0f,0.0f,
-		-1.0f,-1.0f,	0.0f,0.0f,
-		1.0f,1.0f,		1.0f,1.0f,
-		-1.0f,1.0f,		0.0f,1.0f
-	};
-	GLuint vertexBufferHandle;
-	GLuint vertexArrayHandle;
-	GLuint textureHandle = GetTextureFromPNG(Global::inputFilePath);
+	RenderBackground();
+	RenderModel();
+}
 
-	glGenBuffers(1, &vertexBufferHandle);
-	glBindBuffer(GL_ARRAY_BUFFER, vertexBufferHandle);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-	glGenVertexArrays(1, &vertexArrayHandle);
-	glBindVertexArray(vertexArrayHandle);
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(0));
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(sizeof(float) * 2));
-	glEnableVertexAttribArray(0);
-	glEnableVertexAttribArray(1);
-
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, textureHandle); 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	GLuint samplerLocation = glGetUniformLocation(Global::programHandle, "textureSampler");
-	glUniform1i(samplerLocation, 1);
-
-	while (!glfwWindowShouldClose(Global::mainWindow))
-	{
-		glBindVertexArray(vertexArrayHandle);
-		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-		glFinish();
-		glfwPollEvents();
-	}
+void CleanPipeline(PipelineInfo info)
+{
+	glDeleteShader(info.fragmentShaderHandle);
+	glDeleteShader(info.vertexShaderHandle);
+	glDeleteProgram(info.programHandle);
 }
 
 void Cleanup()
 {
-    glfwTerminate();
+	CleanPipeline(Global::backgroundPipelineInfo);
+	CleanPipeline(Global::modelPipelineInfo);
+	glfwTerminate();
 }
