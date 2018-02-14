@@ -3,6 +3,10 @@
 #include <GLFW/glfw3.h>
 #include <png.h>
 
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 #include <iostream>
 #include <fstream>
 #include <iomanip>
@@ -14,10 +18,21 @@
 #include <cstdlib>
 #include <stdexcept>
 
-struct PipelineInfo {
+#include "model.cpp"
+
+struct PipelineInfo 
+{
 	GLuint vertexShaderHandle;
 	GLuint fragmentShaderHandle;
 	GLuint programHandle;
+};
+
+struct ImageData
+{
+	unsigned char *data;
+	unsigned int width;
+	unsigned int height;
+	unsigned int bytePerPixel;
 };
 
 namespace Global
@@ -33,6 +48,8 @@ namespace Global
 	std::string inputFilePath;
 	std::string outputFilePath;
 	std::string backgroundPath;
+	std::string modelPath;
+	std::string modelConfigPath;
 
 	GLFWwindow *mainWindow;
 
@@ -45,37 +62,8 @@ namespace Global
 	PipelineInfo backgroundPipelineInfo;
 }
 
-void Initizalize();
-void Render();
-void Cleanup();
-void ParseArguments(int argc, char **argv);
-void ApplyArguments();
-void DumpArguments();
-
-
-int main(int argc, char **argv)
+ImageData GetImageDataFromPNG(std::string filename,bool flip=false) 
 {
-	ParseArguments(argc, argv);
-	DumpArguments();
-	ApplyArguments();
-	Initizalize();
-	Render();
-	Cleanup();
-	return 0;
-}
-
-void CheckOpenGLError()
-{
-	GLenum errorCode = glGetError();
-	if (errorCode != GL_NO_ERROR)
-	{
-		std::cerr << "ERROR: glGetError() != GL_NO_ERROR" << std::endl;
-		std::cerr << "ERROR glGetError() == " << errorCode << std::endl;
-		exit(-1);
-	}
-}
-
-GLuint GetTextureFromPNG(std::string filename) {
 	std::FILE* filePtr = std::fopen(filename.c_str(), "rb");
 	if (filePtr == nullptr)
 	{
@@ -155,46 +143,148 @@ GLuint GetTextureFromPNG(std::string filename) {
 	}
 	if (!(imageColorType&PNG_COLOR_MASK_ALPHA))
 	{
-		png_set_add_alpha(pngPtr, 0xffffffff, PNG_FILLER_AFTER);
+		png_set_add_alpha(pngPtr, 0x00000000, PNG_FILLER_AFTER);
 	}
 	png_read_update_info(pngPtr, pngInfoPtr);
 
 	// generate a texture buffer for further usage
-	GLuint textureHandle;
-	glGenTextures(1, &textureHandle);
-	glBindTexture(GL_TEXTURE_2D, textureHandle);
+
 	// read & store data
 	unsigned char *imageData = new unsigned char[imageWidth * imageHeight * 4];
 	unsigned char**imageDataArray = new unsigned char*[imageHeight];
-	for (size_t i = 0; i < imageHeight; ++i)
+	if (flip)
 	{
-		imageDataArray[i] = &imageData[(imageHeight - 1 - i) * imageWidth * 4];
+		for (size_t i = 0; i < imageHeight; ++i)
+		{
+			imageDataArray[i] = &imageData[(imageHeight - 1 - i) * imageWidth * 4];
+		}
+	}
+	else
+	{
+		for (size_t i = 0; i < imageHeight; ++i)
+		{
+			imageDataArray[i] = &imageData[i * imageWidth * 4];
+		}
 	}
 	png_read_image(pngPtr, imageDataArray);
 	/* Debug output */
-	/*for (size_t i = 0; i < imageHeight; ++i)
-	{
-		for (size_t j = 0; j < imageWidth; ++j)
-		{
-			for (size_t k = 0; k < 4; ++k)
-			{
-				std::cout << std::setw(2) << std::setfill('0') << std::hex << (static_cast<unsigned int>(imageData[i*imageWidth * 4 + j * 4 + k]) & 0xFF);
-			}
-			std::cout << ' ';
-		}
-		std::cout << std::endl;
-	}*/
+	//for (size_t i = 0; i < imageHeight; ++i)
+	//{
+	//	for (size_t j = 0; j < imageWidth; ++j)
+	//	{
+	//		for (size_t k = 0; k < 4; ++k)
+	//		{
+	//			std::cout << std::setw(2) << std::setfill('0') << std::hex << (static_cast<unsigned int>(imageData[i*imageWidth * 4 + j * 4 + k]) & 0xFF);
+	//		}
+	//		std::cout << ' ';
+	//	}
+	//	std::cout << std::endl;
+	//}
 	/* Debug ouput */
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
-	glFlush();	// make sure opengl copied the data to the memory of texture
 	png_read_end(pngPtr, pngInfoPtr);
 	png_destroy_read_struct(&pngPtr, &pngInfoPtr, nullptr);
 	std::fclose(filePtr);
 
 	delete[] imageDataArray;
-	delete[] imageData;
 
+	ImageData ret;
+	ret.data = imageData;
+	ret.width = imageWidth;
+	ret.height = imageHeight;
+	ret.bytePerPixel = 4;
+	return ret;
+}
+
+GLuint GetTextureFromImage(const ImageData &image)
+{
+	GLuint textureHandle;
+	glGenTextures(1, &textureHandle);
+	glBindTexture(GL_TEXTURE_2D, textureHandle);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
+	glFlush();
 	return textureHandle;
+}
+
+void CopyAndFlipPixelHorizontally(ImageData &image, unsigned int srcX, unsigned int srcY, unsigned int sizeX, unsigned int sizeY, unsigned int targetX, unsigned int targetY)
+{
+	unsigned char *tmp = new unsigned char[sizeX*sizeY*image.bytePerPixel];
+	unsigned char *tmp2 = new unsigned char[sizeX*sizeY*image.bytePerPixel];
+	// read
+	for (unsigned int deltaY = 0; deltaY < sizeY; ++deltaY)
+	{
+		for (unsigned int deltaX = 0; deltaX < sizeX; ++deltaX)
+		{
+			for (unsigned int byteIndex = 0; byteIndex < image.bytePerPixel; ++byteIndex)
+			{
+				tmp[deltaY*sizeX*image.bytePerPixel + deltaX * image.bytePerPixel + byteIndex] = 
+					image.data[(srcY + deltaY)*image.width*image.bytePerPixel + (srcX + deltaX)*image.bytePerPixel + byteIndex];
+			}
+		}
+	}
+	// flip
+	for (unsigned int Y = 0; Y < sizeY; ++Y)
+	{
+		for (unsigned int X = 0; X < sizeX; ++X)
+		{
+			for (unsigned int byteIndex = 0; byteIndex < image.bytePerPixel; ++byteIndex)
+			{
+				tmp2[Y*sizeX*image.bytePerPixel + (sizeX - X - 1)*image.bytePerPixel + byteIndex] = tmp[Y*sizeX*image.bytePerPixel + X * image.bytePerPixel + byteIndex];
+			}
+		}
+	}
+	// write back
+	for (unsigned int deltaY = 0; deltaY < sizeY; ++deltaY)
+	{
+		for (unsigned int deltaX = 0; deltaX < sizeX; ++deltaX)
+		{
+			for (unsigned int byteIndex = 0; byteIndex < image.bytePerPixel; ++byteIndex)
+			{
+				image.data[(targetY + deltaY)*image.width*image.bytePerPixel + (targetX + deltaX)*image.bytePerPixel + byteIndex] = tmp2[deltaY*sizeX*image.bytePerPixel + deltaX * image.bytePerPixel + byteIndex];
+			}
+		}
+	}
+
+	delete[] tmp;
+	delete[] tmp2;
+}
+
+void FilpImageVertically(ImageData &image)
+{
+	unsigned char*tmpImage = new unsigned char[image.bytePerPixel*image.height*image.width];
+	for (unsigned int Y = 0; Y < image.height; ++Y)
+	{
+		std::memcpy(&tmpImage[Y*image.width*image.bytePerPixel], &image.data[(image.height - Y - 1)*image.width*image.bytePerPixel], image.bytePerPixel*image.width);
+	}
+	delete[] image.data;
+	image.data = tmpImage;
+}
+
+ImageData ExtendSkin32x(ImageData &image,bool thinArm)
+{
+	if (image.height != 32 || image.width != 64)
+	{
+		std::cerr << "ERROR: Unable to extend skin image to 64x" << std::endl;
+		exit(-1);
+	}
+	ImageData newImage;
+	newImage.data = new unsigned char[64 * 64 * 4];
+	newImage.height = 64;
+	newImage.width = 64;
+	newImage.bytePerPixel = 4;
+
+	std::memset(newImage.data, 0, sizeof(unsigned char) * 64 * 64 * 4);
+	std::memcpy(newImage.data, image.data, sizeof(unsigned char) * 4 * image.height * image.width);
+	
+	CopyAndFlipPixelHorizontally(newImage, 0, 16, 16, 16, 16, 48);
+	if (thinArm)
+	{
+		CopyAndFlipPixelHorizontally(newImage, 40, 16, 14, 16, 32, 48);
+	}
+	else
+	{
+		CopyAndFlipPixelHorizontally(newImage, 40, 16, 16, 16, 32, 48);
+	}
+	return newImage;
 }
 
 void ParseArguments(int argc, char **argv)
@@ -243,17 +333,17 @@ void ApplyArguments()
 	{
 		Global::fragmentShaderPath = Global::arguments["fragmentShader"];
 	}
-	if (Global::arguments.find("inputFile") != Global::arguments.end())
+	if (Global::arguments.find("input") != Global::arguments.end())
 	{
-		Global::inputFilePath = Global::arguments["inputFile"];
+		Global::inputFilePath = Global::arguments["input"];
 	}
-	if (Global::arguments.find("outputFile") != Global::arguments.end())
+	if (Global::arguments.find("output") != Global::arguments.end())
 	{
-		Global::outputFilePath = Global::arguments["outputFile"];
+		Global::outputFilePath = Global::arguments["output"];
 	}
-	if (Global::arguments.find("backgroundFile") != Global::arguments.end())
+	if (Global::arguments.find("background") != Global::arguments.end())
 	{
-		Global::backgroundPath = Global::arguments["backgroundFile"];
+		Global::backgroundPath = Global::arguments["background"];
 	}
 	if (Global::arguments.find("bgVertexShader") != Global::arguments.end())
 	{
@@ -263,79 +353,14 @@ void ApplyArguments()
 	{
 		Global::bgFragmentShaderPath = Global::arguments["bgFragmentShader"];
 	}
-}
-
-void DebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam)
-{
-	std::clog << "Source: ";
-	switch (source)
+	if (Global::arguments.find("model") != Global::arguments.end())
 	{
-	case GL_DEBUG_SOURCE_API:
-		std::clog << "GL_DEBUG_SOURCE_API"; break;
-	case GL_DEBUG_SOURCE_WINDOW_SYSTEM:
-		std::clog << "GL_DEBUG_SOURCE_WINDOW_SYSTEM"; break;
-	case GL_DEBUG_SOURCE_SHADER_COMPILER:
-		std::clog << "GL_DEBUG_SOURCE_SHADER_COMPILER"; break;
-	case GL_DEBUG_SOURCE_THIRD_PARTY:
-		std::clog << "GL_DEBUG_SOURCE_THIRD_PARTY"; break;
-	case GL_DEBUG_SOURCE_APPLICATION:
-		std::clog << "GL_DEBUG_SOURCE_APPLICATION"; break;
-	case GL_DEBUG_SOURCE_OTHER:
-		std::clog << "GL_DEBUG_SOURCE_OTHER"; break;
-	default:
-		std::clog << "UNKNOWN_SOURCE"; break;
+		Global::modelPath = Global::arguments["model"];
 	}
-	std::clog << '\n';
-
-	std::clog << "Type: ";
-	switch (type)
+	if (Global::arguments.find("modelConfig") != Global::arguments.end())
 	{
-	case GL_DEBUG_TYPE_ERROR:
-		std::clog << "GL_DEBUG_TYPE_ERROR"; break;
-	case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
-		std::clog << "GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR"; break;
-	case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
-		std::clog << "GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR"; break;
-	case GL_DEBUG_TYPE_PERFORMANCE:
-		std::clog << "GL_DEBUG_TYPE_PERFORMANCE"; break;
-	case GL_DEBUG_TYPE_PORTABILITY:
-		std::clog << "GL_DEBUG_TYPE_PORTABILITY"; break;
-	case GL_DEBUG_TYPE_MARKER:
-		std::clog << "GL_DEBUG_TYPE_MARKER"; break;
-	case GL_DEBUG_TYPE_PUSH_GROUP:
-		std::clog << "GL_DEBUG_TYPE_PUSH_GROUP"; break;
-	case GL_DEBUG_TYPE_POP_GROUP:
-		std::clog << "GL_DEBUG_TYPE_POP_GROUP"; break;
-	case GL_DEBUG_TYPE_OTHER:
-		std::clog << "GL_DEBUG_TYPE_OTHER"; break;
-	default:
-		std::clog << "UNKNOWN_TYPE"; break;
+		Global::modelConfigPath = Global::arguments["modelConfig"];
 	}
-	std::clog << '\n';
-
-	std::clog << "Severity: ";
-	switch (severity)
-	{
-	case GL_DEBUG_SEVERITY_HIGH:
-		std::clog << "GL_DEBUG_SEVERITY_HIGH"; break;
-	case GL_DEBUG_SEVERITY_MEDIUM:
-		std::clog << "GL_DEBUG_SEVERITY_MEDIUM"; break;
-	case GL_DEBUG_SEVERITY_LOW:
-		std::clog << "GL_DEBUG_SEVERITY_LOW"; break;
-	case GL_DEBUG_SEVERITY_NOTIFICATION:
-		std::clog << "GL_DEBUG_SEVERITY_NOTIFICATION"; break;
-	default:
-		std::clog << "UNKNOWN_SEVERITY"; break;
-	}
-	std::clog << '\n';
-
-	std::clog.write(message, length);
-	std::clog << std::endl;
-}
-
-void framebufferSizeCallback(GLFWwindow* window, int width, int height)
-{
-	glViewport(0, 0, width, height);
 }
 
 std::string GetFileContent(std::string filename, size_t bufferSize = 1024)
@@ -395,6 +420,7 @@ std::string GetGLProgramLog(GLuint programHandle)
 
 PipelineInfo SynthesizePipeline(std::string vertexShaderPath,std::string fragmentShaderPath)
 {
+
 	int status;
 	const char* _ref;
 	PipelineInfo info;
@@ -439,6 +465,47 @@ PipelineInfo SynthesizePipeline(std::string vertexShaderPath,std::string fragmen
 	return info;
 }
 
+void glDebugOutput(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam)
+{
+	// ignore non-significant error/warning codes
+	// if (id == 131169 || id == 131185 || id == 131218 || id == 131204) return;
+
+	std::cout << "---------------" << std::endl;
+	std::cout << "Debug message (" << id << "): " << message << std::endl;
+
+	switch (source)
+	{
+	case GL_DEBUG_SOURCE_API:             std::cout << "Source: API"; break;
+	case GL_DEBUG_SOURCE_WINDOW_SYSTEM:   std::cout << "Source: Window System"; break;
+	case GL_DEBUG_SOURCE_SHADER_COMPILER: std::cout << "Source: Shader Compiler"; break;
+	case GL_DEBUG_SOURCE_THIRD_PARTY:     std::cout << "Source: Third Party"; break;
+	case GL_DEBUG_SOURCE_APPLICATION:     std::cout << "Source: Application"; break;
+	case GL_DEBUG_SOURCE_OTHER:           std::cout << "Source: Other"; break;
+	} std::cout << std::endl;
+
+	switch (type)
+	{
+	case GL_DEBUG_TYPE_ERROR:               std::cout << "Type: Error"; break;
+	case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR: std::cout << "Type: Deprecated Behaviour"; break;
+	case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:  std::cout << "Type: Undefined Behaviour"; break;
+	case GL_DEBUG_TYPE_PORTABILITY:         std::cout << "Type: Portability"; break;
+	case GL_DEBUG_TYPE_PERFORMANCE:         std::cout << "Type: Performance"; break;
+	case GL_DEBUG_TYPE_MARKER:              std::cout << "Type: Marker"; break;
+	case GL_DEBUG_TYPE_PUSH_GROUP:          std::cout << "Type: Push Group"; break;
+	case GL_DEBUG_TYPE_POP_GROUP:           std::cout << "Type: Pop Group"; break;
+	case GL_DEBUG_TYPE_OTHER:               std::cout << "Type: Other"; break;
+	} std::cout << std::endl;
+
+	switch (severity)
+	{
+	case GL_DEBUG_SEVERITY_HIGH:         std::cout << "Severity: high"; break;
+	case GL_DEBUG_SEVERITY_MEDIUM:       std::cout << "Severity: medium"; break;
+	case GL_DEBUG_SEVERITY_LOW:          std::cout << "Severity: low"; break;
+	case GL_DEBUG_SEVERITY_NOTIFICATION: std::cout << "Severity: notification"; break;
+	} std::cout << std::endl;
+	std::cout << std::endl;
+}
+
 void Initizalize()
 {
 	glfwInit();
@@ -461,12 +528,10 @@ void Initizalize()
 		exit(-1);
 	}
 
-	glfwSetFramebufferSizeCallback(Global::mainWindow, framebufferSizeCallback);
-
-	glViewport(0, 0, Global::windowWidth, Global::windowHeight);
 	glEnable(GL_DEBUG_OUTPUT);
 	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-	glDebugMessageCallback(DebugCallback, nullptr);
+	glDebugMessageCallback(&glDebugOutput, nullptr);
+	glViewport(0, 0, Global::windowWidth, Global::windowHeight);
 	glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
 	Global::modelPipelineInfo = SynthesizePipeline(Global::vertexShaderPath, Global::fragmentShaderPath);
 	Global::backgroundPipelineInfo = SynthesizePipeline(Global::bgVertexShaderPath, Global::bgFragmentShaderPath);
@@ -517,7 +582,9 @@ void RenderBackground()
 
 	if (!Global::backgroundPath.empty())
 	{
-		textureHandle = GetTextureFromPNG(Global::backgroundPath);
+		ImageData image = GetImageDataFromPNG(Global::backgroundPath, true);
+		textureHandle = GetTextureFromImage(image);
+		delete[] image.data;
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, textureHandle);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -538,8 +605,133 @@ void RenderBackground()
 	}
 }
 
+inline void TransformVertices(std::vector<glm::vec4> &vertices, const glm::mat4& transformMatrix)
+{
+	for (auto& vertex : vertices)
+	{
+		vertex = transformMatrix * vertex;
+	}
+}
+
 void RenderModel()
 {
+	auto models = LoadObjModel(Global::modelPath, 64, 64);
+	auto config = LoadModelConfig(Global::modelConfigPath);
+	glm::mat4 camaraMatrix = glm::lookAt(config.eyePosition, config.eyeTarget, config.eyeUpDirection);
+	glm::mat4 projectMatrix = glm::perspective(glm::radians(60.0f), (float)(Global::windowWidth) / (float)(Global::windowHeight), 0.1f, 100.0f);
+
+	// load render data
+	GLuint vertexArrayHandle;
+	GLuint vertexBufferHandle;
+	GLuint textureHandle;
+
+	glGenVertexArrays(1, &vertexArrayHandle);
+	glGenBuffers(1, &vertexBufferHandle);
+
+	std::vector<float> vertexData;
+	std::vector<int> renderIndex;
+	std::vector<int> renderCount;
+	int faceCount = 0;
+
+	for (auto& object : models)
+	{
+		const std::string& name = object.first;
+		if (name.find("Attachment") == std::string::npos)
+		{
+			glm::mat4 transformMatrix = glm::translate(glm::mat4(1.0f), config.origins[name]);
+			for (auto& face : object.second.faces)
+			{
+				for (size_t i = 0; i < 4; ++i)
+				{
+					glm::vec4& raw_position = object.second.vertices[face.element[i].vertexIndex - 1];
+					glm::vec4 position = transformMatrix * raw_position;
+					glm::vec2& textureCoord = object.second.textureCoords[face.element[i].textureCoordIndex - 1];
+					vertexData.push_back(position.x);
+					vertexData.push_back(position.y);
+					vertexData.push_back(position.z);
+					vertexData.push_back(position.w);
+					vertexData.push_back(textureCoord.x);
+					vertexData.push_back(textureCoord.y);
+				}
+				renderIndex.push_back(faceCount * 4);
+				renderCount.push_back(4);
+				++faceCount;
+			}
+		}
+	}
+	for (auto& object : models)
+	{
+		const std::string& name = object.first;
+		if (name.find("Attachment") == std::string::npos)continue;
+		std::string refName = name.substr(0, name.find("Attachment"));
+		ObjModel& objectRef = models[refName];
+		glm::mat4 transformMatrix = glm::translate(glm::mat4(1.0f), config.origins[refName]);
+		transformMatrix = glm::scale(transformMatrix, glm::vec3(config.attachmentScales[refName], config.attachmentScales[refName], config.attachmentScales[refName]));
+		for (auto& face : objectRef.faces)
+		{
+			for (size_t i = 0; i < 4; ++i)
+			{
+				glm::vec4& raw_position = objectRef.vertices[face.element[i].vertexIndex - 1];
+				glm::vec4 position = transformMatrix * raw_position;
+				glm::vec2& textureCoord = object.second.textureCoords[face.element[i].textureCoordIndex - 1];
+				vertexData.push_back(position.x);
+				vertexData.push_back(position.y);
+				vertexData.push_back(position.z);
+				vertexData.push_back(position.w);
+				vertexData.push_back(textureCoord.x);
+				vertexData.push_back(textureCoord.y);
+			}
+			renderIndex.push_back(faceCount * 4);
+			renderCount.push_back(4);
+			++faceCount;
+		}
+	}
+
+
+	glUseProgram(Global::modelPipelineInfo.programHandle);
+	
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBindVertexArray(vertexArrayHandle);
+	glBindBuffer(GL_ARRAY_BUFFER, vertexBufferHandle);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*vertexData.size(), vertexData.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(0));
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(4 * sizeof(float)));
+	glEnableVertexAttribArray(0);
+	glEnableVertexAttribArray(1);
+	
+	ImageData image = GetImageDataFromPNG(Global::inputFilePath, true);
+	if (image.width / image.height == 2)
+	{
+		FilpImageVertically(image);
+		ImageData newImage = ExtendSkin32x(image, false);
+		delete[] image.data;
+		image = newImage;
+		FilpImageVertically(image);
+	}
+	textureHandle = GetTextureFromImage(image);
+	delete[] image.data;
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, textureHandle);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	GLuint samplerLocation = glGetUniformLocation(Global::modelPipelineInfo.programHandle, "textureSampler");
+	glUniform1i(samplerLocation, 0);
+
+	GLuint viewMatrixUniform = glGetUniformLocation(Global::modelPipelineInfo.programHandle, "viewMatrix");
+	GLuint projectMatrixUniform = glGetUniformLocation(Global::modelPipelineInfo.programHandle, "projectMatrix");
+	glUniformMatrix4fv(viewMatrixUniform, 1, GL_FALSE, glm::value_ptr(camaraMatrix));
+	glUniformMatrix4fv(projectMatrixUniform, 1, GL_FALSE, glm::value_ptr(projectMatrix));
+
+	while (!glfwWindowShouldClose(Global::mainWindow))
+	{
+		glClear(GL_DEPTH_BUFFER_BIT);
+		glBindVertexArray(vertexArrayHandle);
+		glMultiDrawArrays(GL_TRIANGLE_FAN, renderIndex.data(), renderCount.data(), renderCount.size());
+		glFlush();
+		glfwPollEvents();
+	}
 
 }
 
@@ -549,16 +741,33 @@ void Render()
 	RenderModel();
 }
 
-void CleanPipeline(PipelineInfo info)
+void CleanupPipeline(PipelineInfo info)
 {
 	glDeleteShader(info.fragmentShaderHandle);
 	glDeleteShader(info.vertexShaderHandle);
 	glDeleteProgram(info.programHandle);
 }
 
+void SaveImage()
+{
+	// TODO
+}
+
 void Cleanup()
 {
-	CleanPipeline(Global::backgroundPipelineInfo);
-	CleanPipeline(Global::modelPipelineInfo);
+	CleanupPipeline(Global::backgroundPipelineInfo);
+	CleanupPipeline(Global::modelPipelineInfo);
 	glfwTerminate();
+}
+
+int main(int argc, char **argv)
+{
+	ParseArguments(argc, argv);
+	DumpArguments();
+	ApplyArguments();
+	Initizalize();
+	Render();
+	SaveImage();
+	Cleanup();
+	return 0;
 }

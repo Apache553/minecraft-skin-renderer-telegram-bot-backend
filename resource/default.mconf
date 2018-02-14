@@ -1,0 +1,11 @@
+headOrigin 0.0 24.0 0.0
+leftArmOrigin 4.0 24.0 0.0
+rightArmOrigin -4.0 24.0 0.0
+leftLegOrigin 2.0 12.0 0.0
+rightLegOrigin -2.0 12.0 0.0
+
+headAttachmentScale 1.0625
+leftArmAttachmentScale 1.0625
+rightArmAttachmentScale 1.0625
+leftLegAttachmentScale 1.0625
+rightLegAttachmentScale 1.0625
