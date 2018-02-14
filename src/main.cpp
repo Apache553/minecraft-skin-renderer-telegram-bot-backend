@@ -110,11 +110,11 @@ ImageData GetImageDataFromPNG(std::string filename,bool flip=false)
 	png_get_IHDR(pngPtr, pngInfoPtr, &imageWidth, &imageHeight, &imageBitDepth,
 		&imageColorType, &imageInterlaceMethod, &imageCompressionMethod, &imageFilterMethod); // get image infomation
 
-	std::cout << "INFO: input file is " << imageWidth << " * " << imageHeight << std::endl;
+	std::cout << "INFO: PNG file is " << imageWidth << " * " << imageHeight << std::endl;
 
 	if (imageColorType == PNG_COLOR_TYPE_RGB || imageColorType == PNG_COLOR_TYPE_RGBA)
 	{
-		std::cout << "INFO: input file is " << (imageColorType == PNG_COLOR_TYPE_RGB ? "RGB" : "RGBA") << " format." << std::endl;
+		std::cout << "INFO: PNG file is " << (imageColorType == PNG_COLOR_TYPE_RGB ? "RGB" : "RGBA") << " format." << std::endl;
 	}
 
 	if (imageColorType == PNG_COLOR_TYPE_PALETTE)
