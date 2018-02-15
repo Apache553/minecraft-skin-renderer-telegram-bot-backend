@@ -1,6 +1,0 @@
-{
-    "C_Cpp.autocomplete": "Disabled",
-    "C_Cpp.intelliSenseEngine": "Tag Parser",
-    "C_Cpp.intelliSenseEngineFallback": "Disabled",
-    "clang.cxxflags": ["-std=c++11","-I${workspaceRoot}/include"]
-}
