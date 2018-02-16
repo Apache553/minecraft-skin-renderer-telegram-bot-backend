@@ -12,7 +12,7 @@ rightArmAttachmentScale 1.0625
 leftLegAttachmentScale 1.0625
 rightLegAttachmentScale 1.0625
 
-eyePosition 0.0  20.0 40.0
+eyePosition 40.0  20.0 40.0
 eyeTarget 0.0 20.0 0.0
 eyeUpDirection 0.0 1.0 0.0
 

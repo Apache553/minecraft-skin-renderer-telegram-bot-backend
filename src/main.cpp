@@ -293,8 +293,6 @@ void Initizalize() {
 void RenderBackground() {
     float vertexInfo[] = {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f,  -1.0f, 1.0f, 0.0f,
                           1.0f,  1.0f,  1.0f, 1.0f, -1.0f, 1.0f,  0.0f, 1.0f};
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_BLEND);
     glUseProgram(Global::backgroundPipelineInfo.programHandle);
     GLuint subroutineIndex;
     if (Global::backgroundPath.empty()) {
@@ -376,6 +374,9 @@ void RenderModel(unsigned int width, unsigned int height) {
     std::vector<float> vertexData;
     std::vector<int> renderIndex;
     std::vector<int> renderCount;
+    std::vector<float> attachVertexData;
+    std::vector<int> attachRenderIndex;
+    std::vector<int> attachRenderCount;
     int faceCount = 0;
 
     for (auto &object : models) {
@@ -414,15 +415,15 @@ void RenderModel(unsigned int width, unsigned int height) {
                 glm::vec4 &raw_position = objectRef.vertices[face.element[i].vertexIndex - 1];
                 glm::vec4 position = transformMatrix * raw_position;
                 glm::vec2 &textureCoord = object.second.textureCoords[face.element[i].textureCoordIndex - 1];
-                vertexData.push_back(position.x);
-                vertexData.push_back(position.y);
-                vertexData.push_back(position.z);
-                vertexData.push_back(position.w);
-                vertexData.push_back(textureCoord.x);
-                vertexData.push_back(textureCoord.y);
+                attachVertexData.push_back(position.x);
+                attachVertexData.push_back(position.y);
+                attachVertexData.push_back(position.z);
+                attachVertexData.push_back(position.w);
+                attachVertexData.push_back(textureCoord.x);
+                attachVertexData.push_back(textureCoord.y);
             }
-            renderIndex.push_back(faceCount * 4);
-            renderCount.push_back(4);
+            attachRenderIndex.push_back(faceCount * 4);
+            attachRenderCount.push_back(4);
             ++faceCount;
         }
     }
@@ -430,8 +431,6 @@ void RenderModel(unsigned int width, unsigned int height) {
     glUseProgram(Global::modelPipelineInfo.programHandle);
 
     glEnable(GL_DEPTH_TEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glBindVertexArray(vertexArrayHandle);
     glBindBuffer(GL_ARRAY_BUFFER, vertexBufferHandle);
     glBufferData(GL_ARRAY_BUFFER, sizeof(float) * vertexData.size(), vertexData.data(), GL_STATIC_DRAW);
@@ -465,6 +464,13 @@ void RenderModel(unsigned int width, unsigned int height) {
     glClear(GL_DEPTH_BUFFER_BIT);
     glBindVertexArray(vertexArrayHandle);
     glMultiDrawArrays(GL_TRIANGLE_FAN, renderIndex.data(), renderCount.data(), renderCount.size());
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBindBuffer(GL_ARRAY_BUFFER, vertexBufferHandle);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * attachVertexData.size(), attachVertexData.data(), GL_STATIC_DRAW);
+    glMultiDrawArrays(GL_TRIANGLE_FAN, renderIndex.data(), renderCount.data(), renderCount.size());
+    glDisable(GL_BLEND);
     glFinish();
 
     glDeleteBuffers(1, &vertexBufferHandle);
@@ -485,25 +491,19 @@ void Render() {
     GLuint renderbufferColorHandle;
     GLuint renderbufferDSHandle;
 
-    GLuint readFramebufferHandle;
-    GLuint readRenderbufferHandle;
+    GLint maxSamples;
 
-    glGenFramebuffers(1, &readFramebufferHandle);
-    glGenRenderbuffers(1, &readRenderbufferHandle);
-    glBindFramebuffer(GL_FRAMEBUFFER, readFramebufferHandle);
-    glBindRenderbuffer(GL_RENDERBUFFER, readRenderbufferHandle);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, Global::frameWidth, Global::frameHeight);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, readRenderbufferHandle);
+    glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
 
     glGenFramebuffers(1, &framebufferHandle);
     glGenRenderbuffers(1, &renderbufferColorHandle);
     glGenRenderbuffers(1, &renderbufferDSHandle);
     glBindFramebuffer(GL_FRAMEBUFFER, framebufferHandle);
     glBindRenderbuffer(GL_RENDERBUFFER, renderbufferDSHandle);
-    glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH_COMPONENT16, Global::frameWidth, Global::frameHeight);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, Global::frameWidth, Global::frameHeight);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, renderbufferDSHandle);
     glBindRenderbuffer(GL_RENDERBUFFER, renderbufferColorHandle);
-    glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_RGBA8, Global::frameWidth, Global::frameHeight);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, Global::frameWidth, Global::frameHeight);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderbufferColorHandle);
 
     glBindFramebuffer(GL_FRAMEBUFFER, framebufferHandle);
@@ -513,11 +513,6 @@ void Render() {
     RenderBackground();
     RenderModel(Global::frameWidth, Global::frameHeight);
 
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, framebufferHandle);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, readFramebufferHandle);
-    glBlitFramebuffer(0, 0, Global::frameWidth, Global::frameHeight, 0, 0, Global::frameWidth, Global::frameHeight,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, readFramebufferHandle);
     SaveImage();
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -525,8 +520,6 @@ void Render() {
     glDeleteRenderbuffers(1, &renderbufferColorHandle);
     glDeleteRenderbuffers(1, &renderbufferDSHandle);
     glDeleteFramebuffers(1, &framebufferHandle);
-    glDeleteRenderbuffers(1, &readRenderbufferHandle);
-    glDeleteFramebuffers(1, &readFramebufferHandle);
 }
 
 void CleanupPipeline(PipelineInfo info) {
