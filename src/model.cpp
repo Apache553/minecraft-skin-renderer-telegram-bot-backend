@@ -104,41 +104,42 @@ ModelConfig LoadModelConfig(std::string filename) {
     if (!input.is_open()) {
         std::cerr << "ERROR: Cannot open model config file\'" << filename << "\'." << std::endl;
         exit(-1);
-        do {
-            input >> token;
-            if (token == "headOrigin")
-                ret.origins["Head"] = ReadVec3(input);
-            else if (token == "bodyOrigin")
-                ret.origins["Body"] = ReadVec3(input);
-            else if (token == "leftArmOrigin")
-                ret.origins["LeftArm"] = ReadVec3(input);
-            else if (token == "rightArmOrigin")
-                ret.origins["RightArm"] = ReadVec3(input);
-            else if (token == "leftLegOrigin")
-                ret.origins["LeftLeg"] = ReadVec3(input);
-            else if (token == "rightLegOrigin")
-                ret.origins["RightLeg"] = ReadVec3(input);
-            else if (token == "headAttachmentScale")
-                ret.attachmentScales["Head"] = ReadFloat(input);
-            else if (token == "bodyAttachmentScale")
-                ret.attachmentScales["Body"] = ReadFloat(input);
-            else if (token == "leftArmAttachmentScale")
-                ret.attachmentScales["LeftArm"] = ReadFloat(input);
-            else if (token == "rightArmAttachmentScale")
-                ret.attachmentScales["RightArm"] = ReadFloat(input);
-            else if (token == "leftLegAttachmentScale")
-                ret.attachmentScales["LeftLeg"] = ReadFloat(input);
-            else if (token == "rightLegAttachmentScale")
-                ret.attachmentScales["RightLeg"] = ReadFloat(input);
-            else if (token == "eyePosition")
-                ret.eyePosition = ReadVec3(input);
-            else if (token == "eyeTarget")
-                ret.eyeTarget = ReadVec3(input);
-            else if (token == "eyeUpDirection")
-                ret.eyeUpDirection = ReadVec3(input);
-            DropLine(input);
-            token.clear();
-        } while (!input.eof());
-        input.close();
-        return ret;
     }
+    do {
+        input >> token;
+        if (token == "headOrigin")
+            ret.origins["Head"] = ReadVec3(input);
+        else if (token == "bodyOrigin")
+            ret.origins["Body"] = ReadVec3(input);
+        else if (token == "leftArmOrigin")
+            ret.origins["LeftArm"] = ReadVec3(input);
+        else if (token == "rightArmOrigin")
+            ret.origins["RightArm"] = ReadVec3(input);
+        else if (token == "leftLegOrigin")
+            ret.origins["LeftLeg"] = ReadVec3(input);
+        else if (token == "rightLegOrigin")
+            ret.origins["RightLeg"] = ReadVec3(input);
+        else if (token == "headAttachmentScale")
+            ret.attachmentScales["Head"] = ReadFloat(input);
+        else if (token == "bodyAttachmentScale")
+            ret.attachmentScales["Body"] = ReadFloat(input);
+        else if (token == "leftArmAttachmentScale")
+            ret.attachmentScales["LeftArm"] = ReadFloat(input);
+        else if (token == "rightArmAttachmentScale")
+            ret.attachmentScales["RightArm"] = ReadFloat(input);
+        else if (token == "leftLegAttachmentScale")
+            ret.attachmentScales["LeftLeg"] = ReadFloat(input);
+        else if (token == "rightLegAttachmentScale")
+            ret.attachmentScales["RightLeg"] = ReadFloat(input);
+        else if (token == "eyePosition")
+            ret.eyePosition = ReadVec3(input);
+        else if (token == "eyeTarget")
+            ret.eyeTarget = ReadVec3(input);
+        else if (token == "eyeUpDirection")
+            ret.eyeUpDirection = ReadVec3(input);
+        DropLine(input);
+        token.clear();
+    } while (!input.eof());
+    input.close();
+    return ret;
+}
