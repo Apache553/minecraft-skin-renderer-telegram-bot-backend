@@ -266,7 +266,7 @@ PipelineInfo SynthesizePipeline(std::string vertexShaderPath, std::string fragme
 
 void Initizalize() {
     glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_FALSE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -294,23 +294,6 @@ void RenderBackground() {
     float vertexInfo[] = {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f,  -1.0f, 1.0f, 0.0f,
                           1.0f,  1.0f,  1.0f, 1.0f, -1.0f, 1.0f,  0.0f, 1.0f};
     glUseProgram(Global::backgroundPipelineInfo.programHandle);
-    GLuint subroutineIndex;
-    if (Global::backgroundPath.empty()) {
-        subroutineIndex =
-            glGetSubroutineIndex(Global::backgroundPipelineInfo.programHandle, GL_FRAGMENT_SHADER, "Plain");
-    } else {
-        subroutineIndex =
-            glGetSubroutineIndex(Global::backgroundPipelineInfo.programHandle, GL_FRAGMENT_SHADER, "Image");
-    }
-    GLuint subroutineLocation =
-        glGetSubroutineUniformLocation(Global::backgroundPipelineInfo.programHandle, GL_FRAGMENT_SHADER, "GetColor");
-    GLsizei number;
-    glGetProgramStageiv(Global::backgroundPipelineInfo.programHandle, GL_FRAGMENT_SHADER,
-                        GL_ACTIVE_SUBROUTINE_UNIFORM_LOCATIONS, &number);
-    GLuint *indices = new GLuint[number];
-    indices[subroutineLocation] = subroutineIndex;
-    glUniformSubroutinesuiv(GL_FRAGMENT_SHADER, number, indices);
-    delete[] indices;
 
     GLuint vertexArrayHandle;
     GLuint vertexArrayBufferHandle;

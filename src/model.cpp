@@ -1,14 +1,14 @@
 
-#include <glm/vec3.hpp>
 #include <glm/vec2.hpp>
+#include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
-#include <memory>
-#include <map>
-#include <vector>
-#include <string>
 #include <fstream>
+#include <map>
+#include <memory>
 #include <numeric>
+#include <string>
+#include <vector>
 
 struct FaceElement {
     unsigned int vertexIndex;
@@ -36,9 +36,7 @@ struct ModelConfig {
     std::map<std::string, float> attachmentScales;
 };
 
-inline void DropLine(std::istream &stream) {
-    stream.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-}
+inline void DropLine(std::istream &stream) { stream.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); }
 
 inline glm::vec3 ReadVec3(std::istream &input) {
     glm::vec3 vec;
@@ -52,13 +50,15 @@ inline float ReadFloat(std::istream &input) {
     return value;
 }
 
-std::map<std::string, ObjModel> LoadObjModel(std::string filename,
-                                             float textureWidth,
-                                             float textureHeight) {
+std::map<std::string, ObjModel> LoadObjModel(std::string filename, float textureWidth, float textureHeight) {
     std::map<std::string, ObjModel> ret;
     ObjModel *current = nullptr;
     std::string token;
     std::ifstream input(filename, std::ios::in);
+    if (!input.is_open()) {
+        std::cerr << "ERROR: Cannot open model file \'" << filename << "\'." << std::endl;
+        exit(-1);
+    }
     do {
         input >> token;
         if (token == "g") {
@@ -101,41 +101,44 @@ ModelConfig LoadModelConfig(std::string filename) {
     std::ifstream input(filename, std::ios::in);
     ModelConfig ret;
     std::string token;
-    do {
-        input >> token;
-        if (token == "headOrigin")
-            ret.origins["Head"] = ReadVec3(input);
-        else if (token == "bodyOrigin")
-            ret.origins["Body"] = ReadVec3(input);
-        else if (token == "leftArmOrigin")
-            ret.origins["LeftArm"] = ReadVec3(input);
-        else if (token == "rightArmOrigin")
-            ret.origins["RightArm"] = ReadVec3(input);
-        else if (token == "leftLegOrigin")
-            ret.origins["LeftLeg"] = ReadVec3(input);
-        else if (token == "rightLegOrigin")
-            ret.origins["RightLeg"] = ReadVec3(input);
-        else if (token == "headAttachmentScale")
-            ret.attachmentScales["Head"] = ReadFloat(input);
-        else if (token == "bodyAttachmentScale")
-            ret.attachmentScales["Body"] = ReadFloat(input);
-        else if (token == "leftArmAttachmentScale")
-            ret.attachmentScales["LeftArm"] = ReadFloat(input);
-        else if (token == "rightArmAttachmentScale")
-            ret.attachmentScales["RightArm"] = ReadFloat(input);
-        else if (token == "leftLegAttachmentScale")
-            ret.attachmentScales["LeftLeg"] = ReadFloat(input);
-        else if (token == "rightLegAttachmentScale")
-            ret.attachmentScales["RightLeg"] = ReadFloat(input);
-        else if (token == "eyePosition")
-            ret.eyePosition = ReadVec3(input);
-        else if (token == "eyeTarget")
-            ret.eyeTarget = ReadVec3(input);
-        else if (token == "eyeUpDirection")
-            ret.eyeUpDirection = ReadVec3(input);
-        DropLine(input);
-        token.clear();
-    } while (!input.eof());
-    input.close();
-    return ret;
-}
+    if (!input.is - open()) {
+        std::cerr << "ERROR: Cannot open model config file\'" << filename << "\'." << std::endl;
+        exit(-1);
+        do {
+            input >> token;
+            if (token == "headOrigin")
+                ret.origins["Head"] = ReadVec3(input);
+            else if (token == "bodyOrigin")
+                ret.origins["Body"] = ReadVec3(input);
+            else if (token == "leftArmOrigin")
+                ret.origins["LeftArm"] = ReadVec3(input);
+            else if (token == "rightArmOrigin")
+                ret.origins["RightArm"] = ReadVec3(input);
+            else if (token == "leftLegOrigin")
+                ret.origins["LeftLeg"] = ReadVec3(input);
+            else if (token == "rightLegOrigin")
+                ret.origins["RightLeg"] = ReadVec3(input);
+            else if (token == "headAttachmentScale")
+                ret.attachmentScales["Head"] = ReadFloat(input);
+            else if (token == "bodyAttachmentScale")
+                ret.attachmentScales["Body"] = ReadFloat(input);
+            else if (token == "leftArmAttachmentScale")
+                ret.attachmentScales["LeftArm"] = ReadFloat(input);
+            else if (token == "rightArmAttachmentScale")
+                ret.attachmentScales["RightArm"] = ReadFloat(input);
+            else if (token == "leftLegAttachmentScale")
+                ret.attachmentScales["LeftLeg"] = ReadFloat(input);
+            else if (token == "rightLegAttachmentScale")
+                ret.attachmentScales["RightLeg"] = ReadFloat(input);
+            else if (token == "eyePosition")
+                ret.eyePosition = ReadVec3(input);
+            else if (token == "eyeTarget")
+                ret.eyeTarget = ReadVec3(input);
+            else if (token == "eyeUpDirection")
+                ret.eyeUpDirection = ReadVec3(input);
+            DropLine(input);
+            token.clear();
+        } while (!input.eof());
+        input.close();
+        return ret;
+    }
