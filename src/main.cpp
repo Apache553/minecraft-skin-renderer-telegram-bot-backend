@@ -438,6 +438,8 @@ void RenderModel(unsigned int width, unsigned int height) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     GLuint samplerLocation = glGetUniformLocation(Global::modelPipelineInfo.programHandle, "textureSampler");
     glUniform1i(samplerLocation, 0);
+    GLuint transparentSwitchLocation =
+        glGetUniformLocation(Global::modelPipelineInfo.programHandle, "disableTransparent");
 
     GLuint viewMatrixUniform = glGetUniformLocation(Global::modelPipelineInfo.programHandle, "viewMatrix");
     GLuint projectMatrixUniform = glGetUniformLocation(Global::modelPipelineInfo.programHandle, "projectMatrix");
@@ -446,12 +448,14 @@ void RenderModel(unsigned int width, unsigned int height) {
 
     glClear(GL_DEPTH_BUFFER_BIT);
     glBindVertexArray(vertexArrayHandle);
+    glUniform1i(transparentSwitchLocation, 1);
     glMultiDrawArrays(GL_TRIANGLE_FAN, renderIndex.data(), renderCount.data(), renderCount.size());
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glBindBuffer(GL_ARRAY_BUFFER, vertexBufferHandle);
     glBufferData(GL_ARRAY_BUFFER, sizeof(float) * attachVertexData.size(), attachVertexData.data(), GL_STATIC_DRAW);
+    glUniform1i(transparentSwitchLocation, 0);
     glMultiDrawArrays(GL_TRIANGLE_FAN, renderIndex.data(), renderCount.data(), renderCount.size());
     glDisable(GL_BLEND);
     glFinish();
