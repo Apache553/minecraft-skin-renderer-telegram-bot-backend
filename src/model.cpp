@@ -101,7 +101,7 @@ ModelConfig LoadModelConfig(std::string filename) {
     std::ifstream input(filename, std::ios::in);
     ModelConfig ret;
     std::string token;
-    if (!input.is - open()) {
+    if (!input.is_open()) {
         std::cerr << "ERROR: Cannot open model config file\'" << filename << "\'." << std::endl;
         exit(-1);
         do {
