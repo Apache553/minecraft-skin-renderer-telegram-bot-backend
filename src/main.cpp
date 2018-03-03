@@ -351,6 +351,8 @@ void RenderModel(unsigned int width, unsigned int height) {
     GLuint vertexBufferHandle;
     GLuint textureHandle;
 
+	bool upscaleRGBA = false;
+	
     glGenVertexArrays(1, &vertexArrayHandle);
     glGenBuffers(1, &vertexBufferHandle);
 
@@ -423,6 +425,7 @@ void RenderModel(unsigned int width, unsigned int height) {
     glEnableVertexAttribArray(1);
 
     ImageData image = GetImageDataFromPNG(Global::inputFilePath, Global::signatureLength, true);
+	upscaleRGBA = image.upscaleRGBA;
     if (image.width / image.height == 2) {
         FilpImageVertically(image);
         ImageData newImage = ExtendSkin32x(image, Global::thinArm);
@@ -437,9 +440,13 @@ void RenderModel(unsigned int width, unsigned int height) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     GLuint samplerLocation = glGetUniformLocation(Global::modelPipelineInfo.programHandle, "textureSampler");
-    glUniform1i(samplerLocation, 0);
     GLuint transparentSwitchLocation =
         glGetUniformLocation(Global::modelPipelineInfo.programHandle, "disableTransparent");
+	GLuint upscaleRGBAFlagLocation =
+		glGetUniformLocation(Global::modelPipelineInfo.programHandle, "upscaleRGBA");
+
+    glUniform1i(samplerLocation, 0);
+	glUniform1i(upscaleRGBAFlagLocation, upscaleRGBA ? 1 : 0);
 
     GLuint viewMatrixUniform = glGetUniformLocation(Global::modelPipelineInfo.programHandle, "viewMatrix");
     GLuint projectMatrixUniform = glGetUniformLocation(Global::modelPipelineInfo.programHandle, "projectMatrix");

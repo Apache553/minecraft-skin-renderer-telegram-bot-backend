@@ -12,6 +12,7 @@ struct ImageData {
     unsigned int width;
     unsigned int height;
     unsigned int bytePerPixel;
+    bool upscaleRGBA;
 };
 
 ImageData GetImageDataFromPNG(std::string filename, unsigned int signatureLength, bool flip = false) {
@@ -134,6 +135,7 @@ ImageData GetImageDataFromPNG(std::string filename, unsigned int signatureLength
     ret.width = imageWidth;
     ret.height = imageHeight;
     ret.bytePerPixel = 4;
+    ret.upscaleRGBA = imageColorType == PNG_COLOR_TYPE_RGB ? true : false;
     return ret;
 }
 
@@ -278,8 +280,14 @@ ImageData ExtendSkin32x(ImageData &image, bool thinArm) {
     FlipImageRegionHorizontally(newImage, 28, 52, 4, 12);
     SwapImageRegion(newImage, 16, 52, 4, 12, 24, 52);
     if (thinArm) {
-        std::cerr << "ERROR: Not a valid skin! Conversion failed!" << std::endl;
-        exit(-1);
+		CopyPixels(newImage, 40, 16, 14, 16, 32, 48);
+		FlipImageRegionHorizontally(newImage, 36, 48, 3, 4);
+		FlipImageRegionHorizontally(newImage, 39, 48, 3, 4);
+		FlipImageRegionHorizontally(newImage, 32, 50, 4, 12);
+		FlipImageRegionHorizontally(newImage, 36, 52, 3, 12);
+		FlipImageRegionHorizontally(newImage, 39, 52, 4, 12);
+		FlipImageRegionHorizontally(newImage, 43, 52, 3, 12);
+		SwapImageRegion(newImage, 32, 52, 4, 12, 39, 52);
     } else {
         CopyPixels(newImage, 40, 16, 16, 16, 32, 48);
         FlipImageRegionHorizontally(newImage, 32, 52, 4, 12);

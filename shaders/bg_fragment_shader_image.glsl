@@ -7,7 +7,4 @@ in vec2 textureCoord;
 
 out vec4 outColor;
 
-void main()
-{
-	outColor=texture(textureSampler,textureCoord);
-}
+void main() { outColor = texture(textureSampler, textureCoord); }
