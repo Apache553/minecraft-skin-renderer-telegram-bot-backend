@@ -18,6 +18,8 @@
 #include <string>
 #include <thread>
 
+#include <unistd.h>
+
 struct PipelineInfo {
     GLuint vertexShaderHandle;
     GLuint fragmentShaderHandle;
@@ -32,6 +34,9 @@ std::string fragmentShaderPath;
 
 std::string bgVertexShaderPath;
 std::string bgFragmentShaderPath;
+
+std::string outputVertexShaderPath;
+std::string outputFragmentShaderPath;
 
 std::string inputFilePath;
 std::string outputFilePath;
@@ -50,10 +55,13 @@ int windowHeight = 600;
 int frameWidth = 800;
 int frameHeight = 600;
 
+int sizeMultiplier = 2;
+
 const int signatureLength = 4;
 
 PipelineInfo modelPipelineInfo;
 PipelineInfo backgroundPipelineInfo;
+PipelineInfo outputPipelineInfo;
 }  // namespace Global
 
 #include "model.cpp"
@@ -127,6 +135,10 @@ void ApplyArguments() {
         char *ptr;
         Global::frameHeight = strtoul(Global::arguments["frameHeight"].c_str(), &ptr, 10);
     }
+    if (Global::arguments.find("sizeMultiplier") != Global::arguments.end()) {
+        char *ptr;
+        Global::sizeMultiplier = strtoul(Global::arguments["sizeMultiplier"].c_str(), &ptr, 10);
+    }
     if (Global::arguments.find("vertexShader") != Global::arguments.end()) {
         Global::vertexShaderPath = Global::arguments["vertexShader"];
     }
@@ -147,6 +159,12 @@ void ApplyArguments() {
     }
     if (Global::arguments.find("bgFragmentShader") != Global::arguments.end()) {
         Global::bgFragmentShaderPath = Global::arguments["bgFragmentShader"];
+    }
+    if (Global::arguments.find("outputVertexShader") != Global::arguments.end()) {
+        Global::outputVertexShaderPath = Global::arguments["outputVertexShader"];
+    }
+    if (Global::arguments.find("outputFragmentShader") != Global::arguments.end()) {
+        Global::outputFragmentShaderPath = Global::arguments["outputFragmentShader"];
     }
     if (Global::arguments.find("model") != Global::arguments.end()) {
         Global::modelPath = Global::arguments["model"];
@@ -288,6 +306,7 @@ void Initizalize() {
     std::cout << "INFO: window framebuffer is " << Global::frameWidth << '*' << Global::frameHeight << std::endl;
     Global::modelPipelineInfo = SynthesizePipeline(Global::vertexShaderPath, Global::fragmentShaderPath);
     Global::backgroundPipelineInfo = SynthesizePipeline(Global::bgVertexShaderPath, Global::bgFragmentShaderPath);
+    Global::outputPipelineInfo = SynthesizePipeline(Global::outputVertexShaderPath, Global::outputFragmentShaderPath);
 }
 
 void RenderBackground() {
@@ -321,6 +340,7 @@ void RenderBackground() {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         GLuint samplerLocation = glGetUniformLocation(Global::backgroundPipelineInfo.programHandle, "textureSampler");
         glUniform1i(samplerLocation, 0);
+        glEnable(GL_DEPTH_TEST);
     }
 
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
@@ -332,6 +352,40 @@ void RenderBackground() {
     if (!Global::backgroundPath.empty()) {
         glDeleteTextures(1, &textureHandle);
     }
+}
+
+void RenderPostProcess(GLuint textureHandle) {
+    float vertexInfo[] = {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f,  -1.0f, 1.0f, 0.0f,
+                          1.0f,  1.0f,  1.0f, 1.0f, -1.0f, 1.0f,  0.0f, 1.0f};
+    glUseProgram(Global::outputPipelineInfo.programHandle);
+
+    GLuint vertexArrayHandle;
+    GLuint vertexArrayBufferHandle;
+
+    glGenVertexArrays(1, &vertexArrayHandle);
+    glGenBuffers(1, &vertexArrayBufferHandle);
+
+    glBindVertexArray(vertexArrayHandle);
+    glBindBuffer(GL_ARRAY_BUFFER, vertexArrayBufferHandle);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertexInfo), vertexInfo, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void *)(0));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void *)(sizeof(float) * 2));
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, textureHandle);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    GLuint samplerLocation = glGetUniformLocation(Global::outputPipelineInfo.programHandle, "textureSampler");
+    glUniform1i(samplerLocation, 0);
+
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+    glFlush();
+
+    glDeleteBuffers(1, &vertexArrayBufferHandle);
+    glDeleteVertexArrays(1, &vertexArrayHandle);
 }
 
 inline void TransformVertices(std::vector<glm::vec4> &vertices, const glm::mat4 &transformMatrix) {
@@ -351,8 +405,8 @@ void RenderModel(unsigned int width, unsigned int height) {
     GLuint vertexBufferHandle;
     GLuint textureHandle;
 
-	bool upscaleRGBA = false;
-	
+    bool upscaleRGBA = false;
+
     glGenVertexArrays(1, &vertexArrayHandle);
     glGenBuffers(1, &vertexBufferHandle);
 
@@ -386,6 +440,7 @@ void RenderModel(unsigned int width, unsigned int height) {
             }
         }
     }
+    faceCount = 0;
     for (auto &object : models) {
         const std::string &name = object.first;
         if (name.find("Attachment") == std::string::npos) continue;
@@ -425,7 +480,7 @@ void RenderModel(unsigned int width, unsigned int height) {
     glEnableVertexAttribArray(1);
 
     ImageData image = GetImageDataFromPNG(Global::inputFilePath, Global::signatureLength, true);
-	upscaleRGBA = image.upscaleRGBA;
+    upscaleRGBA = image.upscaleRGBA;
     if (image.width / image.height == 2) {
         FilpImageVertically(image);
         ImageData newImage = ExtendSkin32x(image, Global::thinArm);
@@ -442,11 +497,10 @@ void RenderModel(unsigned int width, unsigned int height) {
     GLuint samplerLocation = glGetUniformLocation(Global::modelPipelineInfo.programHandle, "textureSampler");
     GLuint transparentSwitchLocation =
         glGetUniformLocation(Global::modelPipelineInfo.programHandle, "disableTransparent");
-	GLuint upscaleRGBAFlagLocation =
-		glGetUniformLocation(Global::modelPipelineInfo.programHandle, "upscaleRGBA");
+    GLuint upscaleRGBAFlagLocation = glGetUniformLocation(Global::modelPipelineInfo.programHandle, "upscaleRGBA");
 
     glUniform1i(samplerLocation, 0);
-	glUniform1i(upscaleRGBAFlagLocation, upscaleRGBA ? 1 : 0);
+    glUniform1i(upscaleRGBAFlagLocation, upscaleRGBA ? 1 : 0);
 
     GLuint viewMatrixUniform = glGetUniformLocation(Global::modelPipelineInfo.programHandle, "viewMatrix");
     GLuint projectMatrixUniform = glGetUniformLocation(Global::modelPipelineInfo.programHandle, "projectMatrix");
@@ -459,12 +513,17 @@ void RenderModel(unsigned int width, unsigned int height) {
     glMultiDrawArrays(GL_TRIANGLE_FAN, renderIndex.data(), renderCount.data(), renderCount.size());
 
     glEnable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+    glDepthMask(GL_FALSE);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glBindBuffer(GL_ARRAY_BUFFER, vertexBufferHandle);
     glBufferData(GL_ARRAY_BUFFER, sizeof(float) * attachVertexData.size(), attachVertexData.data(), GL_STATIC_DRAW);
     glUniform1i(transparentSwitchLocation, 0);
-    glMultiDrawArrays(GL_TRIANGLE_FAN, renderIndex.data(), renderCount.data(), renderCount.size());
+    glMultiDrawArrays(GL_TRIANGLE_FAN, attachRenderIndex.data(), attachRenderCount.data(), attachRenderCount.size());
+    glEnable(GL_CULL_FACE);
     glDisable(GL_BLEND);
+
+    glDisable(GL_DEPTH_TEST);
     glFinish();
 
     glDeleteBuffers(1, &vertexBufferHandle);
@@ -473,17 +532,10 @@ void RenderModel(unsigned int width, unsigned int height) {
 }
 
 void Render() {
-    if (Global::keepWindow) {
-        RenderBackground();
-        RenderModel(Global::windowWidth, Global::windowHeight);
-        while (!glfwWindowShouldClose(Global::mainWindow)) {
-            glfwPollEvents();
-        }
-    }
-
     GLuint framebufferHandle;
     GLuint renderbufferColorHandle;
     GLuint renderbufferDSHandle;
+    GLuint resultTexture;
 
     GLint maxSamples;
 
@@ -493,20 +545,34 @@ void Render() {
     glGenRenderbuffers(1, &renderbufferColorHandle);
     glGenRenderbuffers(1, &renderbufferDSHandle);
     glBindFramebuffer(GL_FRAMEBUFFER, framebufferHandle);
+
     glBindRenderbuffer(GL_RENDERBUFFER, renderbufferDSHandle);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, Global::frameWidth, Global::frameHeight);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, Global::frameWidth * Global::sizeMultiplier,
+                          Global::frameHeight * Global::sizeMultiplier);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, renderbufferDSHandle);
+
     glBindRenderbuffer(GL_RENDERBUFFER, renderbufferColorHandle);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, Global::frameWidth, Global::frameHeight);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderbufferColorHandle);
+    // glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, Global::frameWidth, Global::frameHeight);
+    glGenTextures(1, &resultTexture);
+    glBindTexture(GL_TEXTURE_2D, resultTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Global::frameWidth * Global::sizeMultiplier,
+                 Global::frameHeight * Global::sizeMultiplier, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, resultTexture, 0);
+    // glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderbufferColorHandle);
 
     glBindFramebuffer(GL_FRAMEBUFFER, framebufferHandle);
-    glViewport(0, 0, Global::frameWidth, Global::frameHeight);
+    glViewport(0, 0, Global::frameWidth * Global::sizeMultiplier, Global::frameHeight * Global::sizeMultiplier);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     RenderBackground();
-    RenderModel(Global::frameWidth, Global::frameHeight);
+    RenderModel(Global::frameWidth * Global::sizeMultiplier, Global::frameHeight * Global::sizeMultiplier);
 
+    glViewport(0, 0, Global::frameWidth, Global::frameHeight);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    RenderPostProcess(resultTexture);
     SaveImage();
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -514,6 +580,14 @@ void Render() {
     glDeleteRenderbuffers(1, &renderbufferColorHandle);
     glDeleteRenderbuffers(1, &renderbufferDSHandle);
     glDeleteFramebuffers(1, &framebufferHandle);
+    glDeleteTextures(1, &resultTexture);
+
+    if (Global::keepWindow) {
+        while (!glfwWindowShouldClose(Global::mainWindow)) {
+            glfwPollEvents();
+            usleep(100);
+        }
+    }
 }
 
 void CleanupPipeline(PipelineInfo info) {
